@@ -311,12 +311,14 @@ print("Mean absolute AE difference saved successfully.")
 
 # In[ ]:
 
+#
+
 # to extract the lag signatures
 
 import os
 import pandas as pd
 import numpy as np
-input_folder = r"E:\phd_results\objective_1\germany\lag_filtered_coh_gt_0p8"
+input_folder = r"E:\phd_results\objective_1\germany\lag_days_all"
 output_csv = r"E:\phd_results\objective_1\germany\mean_lag_overscales1.csv"
 
 rows = []
@@ -382,6 +384,32 @@ result.to_csv(output_file, index=False)
 
 print("Max lag values saved successfully.")
 
+# to combine all extracted Signatures 
+
+import os
+import pandas as pd
+
+input_folder = r"E:\phd_results\objective_1\germany\features"
+
+output_file = r"E:\phd_results\objective_1\germany\germany_ALL_features_combined.csv"
+
+csv_files = [f for f in os.listdir(input_folder) if f.endswith("_features.csv")]
+
+all_rows = []
+
+for file in csv_files:
+
+    file_path = os.path.join(input_folder, file)
+    station_id = file.split("_")[4]  
+    df = pd.read_csv(file_path)
+    if "Station" not in df.columns:
+        df.insert(0, "Station", station_id)
+    df["Station"] = df["Station"].astype(str)
+    all_rows.append(df)
+
+combined_df = pd.concat(all_rows, ignore_index=True)
+combined_df.to_csv(output_file, index=False)
+
 
 # RMI signature for the scale range 
 
@@ -429,4 +457,772 @@ result.to_csv(output_file, index=False)
 print("Correct RMI file saved to:", output_file)
 
 
+# to determine flashiness index
+
+import os
+import pandas as pd
+import numpy as np
+
+input_folder = r"E:\camels_de\13837553\camels_de\germany_timeseries_IQR"
+output_folder = r"E:\phd_results\objective_1\germany\germany_FLASHINESSINDEX"
+
+os.makedirs(output_folder, exist_ok=True)
+
+csv_files = [f for f in os.listdir(input_folder) if f.endswith(".csv")]
+
+all_summary = []
+
+for file in csv_files:
+
+    file_path = os.path.join(input_folder, file)
+    catchment_id = file.split("_")[4]
+
+    df = pd.read_csv(file_path)
+
+    df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d")
+    df.rename(columns={"discharge_mm": "Flow"}, inplace=True)
+
+    df = df.sort_values("date")
+
+    df["Year"] = df["date"].dt.year
+    df["Month"] = df["date"].dt.month
+
+    df["water_year"] = df["Year"]
+    df.loc[df["Month"] >= 10, "water_year"] += 1
+
+    yearly_results = []
+
+    for year, group in df.groupby("water_year"):
+
+        group = group.sort_values("date")
+
+        diff = group["Flow"].diff().abs().sum()
+        total_flow = group["Flow"].sum()
+
+        if total_flow == 0 or np.isnan(total_flow):
+            rb = np.nan
+        else:
+            rb = diff / total_flow
+
+        yearly_results.append({
+            "water_year": year,
+            "RB_index": rb
+        })
+
+    yearly_df = pd.DataFrame(yearly_results)
+
+    yearly_output = os.path.join(output_folder, f"{catchment_id}_RB_yearly.csv")
+    yearly_df.to_csv(yearly_output, index=False)
+
+    mean_rb = yearly_df["RB_index"].mean()
+    median_rb = yearly_df["RB_index"].median()
+
+    all_summary.append({
+        "catchment_id": catchment_id,
+        "RB_mean": mean_rb,
+        "RB_median": median_rb
+    })
+
+    print(f" Processed: {catchment_id}")
+
+summary_df = pd.DataFrame(all_summary)
+
+summary_output = os.path.join(output_folder, "ALL_CATCHMENTS_RB_SUMMARY.csv")
+summary_df.to_csv(summary_output, index=False)
+
+print(" DONE!")
+print(f"Summary file saved at: {summary_output}")
+
+
+# the below codes is to draw plots 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+from matplotlib.ticker import MaxNLocator
+
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.size": 12,
+    "axes.labelsize": 14,
+    "axes.titlesize": 14,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 12,
+    "axes.linewidth": 1.2,
+    "lines.linewidth": 1.8,
+})
+
+phase_csv = r"E:\phd_results\objective_1\germany\plots_for_attributes.csv"
+lag_csv   = r"E:\phd_results\objective_1\germany\plots_for_attributes_lag.csv"
+
+out_phase = r"E:\phd_results\objective_1\germany\plots\phase"
+out_lag   = r"E:\phd_results\objective_1\germany\plots\lag"
+
+os.makedirs(out_phase, exist_ok=True)
+os.makedirs(out_lag, exist_ok=True)
+
+MAX_PERIOD = 365
+
+phase_df = pd.read_csv(phase_csv)
+lag_df   = pd.read_csv(lag_csv)
+
+for df in (phase_df, lag_df):
+    df.rename(columns={df.columns[0]: "Catchment"}, inplace=True)
+    df.set_index("Catchment", inplace=True)
+
+periods = np.array(phase_df.columns, dtype=float)
+valid_cols = periods <= MAX_PERIOD
+periods = periods[valid_cols]
+
+phase_df = phase_df.iloc[:, valid_cols]
+lag_df   = lag_df.iloc[:, valid_cols]
+
+for catchment in phase_df.index:
+
+    phase = phase_df.loc[catchment].astype(float).values
+    lag   = lag_df.loc[catchment].astype(float).values
+
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+
+    ax.plot(periods, phase, color="black")
+    ax.set_xlabel("Period (days)")
+    ax.set_ylabel("Phase (degrees)")
+    ax.set_title(f"Catchment {catchment}", loc="left")
+
+    ax.xaxis.set_major_locator(MaxNLocator(6))
+    ax.yaxis.set_major_locator(MaxNLocator(6))
+
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    plt.savefig(
+        os.path.join(out_phase, f"{catchment}.jpg"),
+        format="jpg",
+        dpi=600,
+        bbox_inches="tight"
+    )
+    plt.close()
+
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+
+    ax.plot(periods, lag, color="black")
+    ax.set_xlabel("Period (days)")
+    ax.set_ylabel("Lag (days)")
+    ax.set_title(f"Catchment {catchment}", loc="left")
+
+    ax.xaxis.set_major_locator(MaxNLocator(6))
+    ax.yaxis.set_major_locator(MaxNLocator(6))
+
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    plt.savefig(
+        os.path.join(out_lag, f"{catchment}.jpg"),
+        format="jpg",
+        dpi=600,
+        bbox_inches="tight"
+    )
+    plt.close()
+
+    print(f"Saved paper-quality JPG plots for catchment {catchment}")
+
+print("All catchments processed successfully.")
+
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+from matplotlib.ticker import MaxNLocator
+
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.size": 12,
+    "axes.labelweight": "bold",
+    "axes.titleweight": "bold",
+    "axes.labelsize": 14,
+    "axes.titlesize": 14,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 12,
+    "axes.linewidth": 1.2,
+    "lines.linewidth": 1.8,
+})
+input_csv = r"E:\phd_results\objective_1\germany\plots_for_attributes_mean.csv"
+output_folder = r"E:\phd_results\objective_1\germany\plots\mean_coherence"
+
+os.makedirs(output_folder, exist_ok=True)
+
+df = pd.read_csv(input_csv)
+df = df.rename(columns={df.columns[0]: "Station"})
+df.set_index("Station", inplace=True)
+
+x_labels = df.columns.tolist()
+x_positions = np.arange(len(x_labels))  
+for station in df.index:
+    y_values = df.loc[station].values
+
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+    ax.plot(x_positions, y_values, color="black")
+
+    ax.set_xlabel("Period Range (days)")
+    ax.set_ylabel("Coherence")
+    ax.set_title(f"Station {station}", loc="left")
+
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(x_labels, rotation=45)
+
+    ax.yaxis.set_major_locator(MaxNLocator(6))
+
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    save_path = os.path.join(output_folder, f"{station}.jpg")
+    plt.savefig(save_path, dpi=600, bbox_inches="tight")
+    plt.close()
+
+    print(f"Saved: {save_path}")
+
+print("All plots created successfully.")
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+from matplotlib.ticker import MaxNLocator
+
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.size": 12,
+    "axes.labelweight": "bold",
+    "axes.titleweight": "bold",
+    "axes.labelsize": 14,
+    "axes.titlesize": 14,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 12,
+    "axes.linewidth": 1.2,
+    "lines.linewidth": 1.8,
+})
+input_csv = r"E:\phd_results\objective_1\germany\plots_for_attributes_mean.csv"
+output_folder = r"E:\phd_results\objective_1\germany\plots\mean_significance"
+
+os.makedirs(output_folder, exist_ok=True)
+
+df = pd.read_csv(input_csv)
+df = df.rename(columns={df.columns[0]: "Station"})
+df.set_index("Station", inplace=True)
+
+x_labels = df.columns.tolist()
+x_positions = np.arange(len(x_labels))  
+for station in df.index:
+    y_values = df.loc[station].values
+
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+    ax.plot(x_positions, y_values, color="black")
+
+    ax.set_xlabel("Period Range (days)")
+    ax.set_ylabel("Significance (%)")
+    ax.set_title(f"Station {station}", loc="left")
+
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(x_labels, rotation=45)
+
+    ax.yaxis.set_major_locator(MaxNLocator(6))
+
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    save_path = os.path.join(output_folder, f"{station}.jpg")
+    plt.savefig(save_path, dpi=600, bbox_inches="tight")
+    plt.close()
+
+    print(f"Saved: {save_path}")
+
+print("All plots created successfully.")
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+from matplotlib.ticker import MaxNLocator
+
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.size": 12,
+    "axes.labelweight": "bold",
+    "axes.titleweight": "bold",
+    "axes.labelsize": 14,
+    "axes.titlesize": 14,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 12,
+    "axes.linewidth": 1.2,
+    "lines.linewidth": 1.8,
+})
+input_csv = r"E:\phd_results\objective_1\germany\plots_for_attributes_mean.csv"
+output_folder = r"E:\phd_results\objective_1\germany\plots\mean_phase_conc"
+
+os.makedirs(output_folder, exist_ok=True)
+
+df = pd.read_csv(input_csv)
+df = df.rename(columns={df.columns[0]: "Station"})
+df.set_index("Station", inplace=True)
+
+x_labels = df.columns.tolist()
+x_positions = np.arange(len(x_labels)) 
+for station in df.index:
+    y_values = df.loc[station].values
+
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+    ax.plot(x_positions, y_values, color="black")
+
+    ax.set_xlabel("Period Range (days)")
+    ax.set_ylabel("Phase Concentration")
+    ax.set_title(f"Station {station}", loc="left")
+
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(x_labels, rotation=45)
+
+    ax.yaxis.set_major_locator(MaxNLocator(6))
+
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    save_path = os.path.join(output_folder, f"{station}.jpg")
+    plt.savefig(save_path, dpi=600, bbox_inches="tight")
+    plt.close()
+
+    print(f"Saved: {save_path}")
+
+print("All plots created successfully.")
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
+
+csv_file = r"E:\camels_de\13837553\camels_de\germany_timeseries\CAMELS_DE_hydromet_timeseries_DEG10010.csv"
+out_dir  = r"E:\phd_results\objective_1\germany\plots\timeseries_plot"
+
+os.makedirs(out_dir, exist_ok=True)
+
+catchment_id = "DEG10010"
+
+df = pd.read_csv(csv_file)
+
+df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d")
+
+fig, ax = plt.subplots(figsize=(14, 5))
+
+ax.vlines(
+    df["date"],
+    ymin=0,
+    ymax=df["precipitation_mm"],
+    color="red",
+    linewidth=0.8,
+    label="Precipitation (mm)"
+)
+
+ax.plot(
+    df["date"],
+    df["discharge_mm"],
+    color="blue",
+    linewidth=1.2,
+    label="Streamflow (mm)"
+)
+
+ax.set_xlabel("Date")
+ax.set_ylabel("Values")
+
+start_date = df["date"].min().strftime("%d/%m/%Y")
+end_date   = df["date"].max().strftime("%d/%m/%Y")
+
+ax.set_title(
+    f"Daily Precipitation and Streamflow ({start_date} to {end_date})"
+)
+
+ax.grid(True, linestyle="-", alpha=0.6)
+ax.legend(loc="upper right")
+
+out_file = os.path.join(out_dir, f"{catchment_id}.jpg")
+
+plt.tight_layout()
+plt.savefig(
+    out_file,
+    format="jpg",
+    dpi=600,
+    bbox_inches="tight"
+)
+plt.close()
+
+print(f"Saved 600 dpi JPG for catchment {catchment_id} to:\n{out_file}")
+
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
+
+plt.rcParams.update({
+    "font.size": 14,
+    "axes.labelweight": "bold",
+    "axes.titleweight": "bold",
+    "axes.titlesize": 18,
+    "axes.labelsize": 16,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
+    "legend.fontsize": 15
+})
+
+input_file = r"E:\camels_de\13837553\camels_de\germany_timeseries\CAMELS_DE_hydromet_timeseries_DEG10010.csv"
+base_output_folder = r"E:\phd_results\objective_1\germany\plots\timeseries_plot\DEG10010"
+
+hydro_folder = os.path.join(base_output_folder, "hydro")
+temp_folder = os.path.join(base_output_folder, "temperature")
+
+os.makedirs(hydro_folder, exist_ok=True)
+os.makedirs(temp_folder, exist_ok=True)
+
+df = pd.read_csv(input_file)
+df.columns = df.columns.str.strip()
+df['date'] = pd.to_datetime(df['date'], dayfirst=True, errors='coerce')
+df = df.dropna(subset=['date'])
+
+years = range(1981, 2015)
+
+for year in years:
+    df_year = df[df['date'].dt.year == year]
+    if df_year.empty:
+        continue
+
+    fig, ax1 = plt.subplots(figsize=(14, 6))
+
+    p_bar = ax1.bar(
+        df_year['date'], df_year['precipitation_mm'],
+        color='blue', label='Precipitation (mm)', width=1
+    )
+    
+    ax1.set_ylabel('Precipitation (mm)', fontweight='bold')
+    ax1.set_title(f"Daily Precipitation, and Streamflow ({year})", fontweight='bold')
+    ax1.grid(True, linestyle='--', alpha=0.5)
+    ax1.spines['top'].set_visible(False)
+
+    ax2 = ax1.twinx()
+    q_line, = ax2.plot(
+        df_year['date'], df_year['discharge_mm'],
+        color='green', label='Streamflow (mm)', linewidth=2.5
+    )
+    ax2.set_ylabel('Streamflow (mm)', fontweight='bold', color='green')
+    ax2.tick_params(axis='y', labelcolor='green')
+    ax2.spines['top'].set_visible(False)
+
+    ax1.set_xlabel('date', fontweight='bold')
+
+    for ax in [ax1, ax2]:
+        for label in ax.get_xticklabels() + ax.get_yticklabels():
+            label.set_fontweight('bold')
+
+    handles = [p_bar, q_line]
+    labels = ['Precipitation (mm)', 'Streamflow (mm)']
+
+    legend = fig.legend(
+        handles, labels,
+        loc='lower center',
+        ncol=3,
+        frameon=False
+    )
+
+    for text in legend.get_texts():
+        text.set_fontweight('bold')
+
+    plt.subplots_adjust(bottom=0.22)
+
+    hydro_path = os.path.join(hydro_folder, f"hydro_{year}.jpg")
+    plt.savefig(hydro_path, dpi=1200, bbox_inches='tight')
+    plt.close()
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+
+    ax.plot(df_year['date'], df_year['temp_max'], color='red', label='Tmax (°C)', linewidth=2.5)
+    ax.plot(df_year['date'], df_year['temp_min'], color='blue', label='Tmin (°C)', linewidth=2.5)
+
+    ax.set_xlabel("date", fontweight='bold')
+    ax.set_ylabel("Temperature (°C)", fontweight='bold')
+    ax.set_title(f"Daily Maximum and Minimum Temperature ({year})", fontweight='bold')
+
+    legend = ax.legend(loc='upper right')
+    for text in legend.get_texts():
+        text.set_fontweight('bold')
+
+    ax.grid(True)
+
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_fontweight('bold')
+
+    plt.tight_layout()
+
+    temp_path = os.path.join(temp_folder, f"temperature_{year}.jpg")
+    plt.savefig(temp_path, dpi=1200)
+    plt.close()
+
+print("All yearly plots created successfully.")
+
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.size": 16,
+    "axes.labelsize": 18,
+    "axes.titlesize": 20,
+    "axes.titleweight": "bold",
+    "axes.labelweight": "bold",
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 17,
+    "axes.linewidth": 1.4,
+    "lines.linewidth": 2.8
+})
+
+input_file = r"E:\camels_de\13837553\camels_de\germany_timeseries\CAMELS_DE_hydromet_timeseries_DEG10010.csv"
+out_dir = r"E:\phd_results\objective_1\germany\plots\time_series_plot_events\DEG10010"
+os.makedirs(out_dir, exist_ok=True)
+
+df = pd.read_csv(input_file)
+df.columns = df.columns.str.strip()
+df['date'] = pd.to_datetime(df['date'], dayfirst=True)
+
+event_start = pd.to_datetime("1997-01-01")
+event_end   = pd.to_datetime("2005-01-01")
+event_label = f"{event_start.year}_{event_end.year}"
+
+ma_windows = [256, 128, 64, 32, 16, 8]
+
+for ma_window in ma_windows:
+
+    half_win = ma_window // 2
+    max_lag  = ma_window // 2
+
+    df_ext = df[
+        (df['date'] >= event_start - pd.Timedelta(days=half_win)) &
+        (df['date'] <= event_end   + pd.Timedelta(days=half_win + max_lag))
+    ].copy()
+
+    df_ext['P_ma'] = df_ext['precipitation_mm'].rolling(
+        window=ma_window, center=True, min_periods=ma_window
+    ).mean()
+
+    df_ext['Q_ma'] = df_ext['discharge_mm'].rolling(
+        window=ma_window, center=True, min_periods=ma_window
+    ).mean()
+
+    P_event = df_ext[
+        (df_ext['date'] >= event_start) &
+        (df_ext['date'] <= event_end)
+    ][['date', 'P_ma']].dropna().reset_index(drop=True)
+
+    correlations = []
+
+    for lag in range(max_lag + 1):
+        Q_event = df_ext[
+            (df_ext['date'] >= event_start + pd.Timedelta(days=lag)) &
+            (df_ext['date'] <= event_end   + pd.Timedelta(days=lag))
+        ][['date', 'Q_ma']].dropna().reset_index(drop=True)
+
+        n = min(len(P_event), len(Q_event))
+        correlations.append(
+            P_event.iloc[:n]['P_ma'].corr(Q_event.iloc[:n]['Q_ma'])
+        )
+
+    best_lag  = int(np.nanargmax(correlations))
+    best_corr = correlations[best_lag]
+
+    Q_best = df_ext[
+        (df_ext['date'] >= event_start + pd.Timedelta(days=best_lag)) &
+        (df_ext['date'] <= event_end   + pd.Timedelta(days=best_lag))
+    ][['date', 'Q_ma']].dropna().reset_index(drop=True)
+
+    n = min(len(P_event), len(Q_best))
+    P_plot = P_event.iloc[:n]
+    Q_plot = Q_best.iloc[:n]
+
+    fig, ax1 = plt.subplots(figsize=(14, 6))
+
+    p_line, = ax1.plot(
+        P_plot['date'], P_plot['P_ma'],
+        color='red',
+        label=f'{ma_window}-day Centered MA Precipitation'
+    )
+    ax1.set_ylabel("Precipitation (mm)", fontweight='bold', color='red')
+    ax1.tick_params(axis='y', labelcolor='red')
+    ax1.grid(True, linestyle='--', alpha=0.4)
+    ax1.spines[['top']].set_visible(False)
+
+    ax2 = ax1.twinx()
+    q_line, = ax2.plot(
+        Q_plot['date'], Q_plot['Q_ma'],
+        color='blue',
+        label=f'{ma_window}-day Centered MA Streamflow (Lag = {best_lag} days)'
+    )
+    ax2.set_ylabel("Streamflow (mm)", fontweight='bold', color='blue')
+    ax2.tick_params(axis='y', labelcolor='blue')
+    ax2.spines[['top']].set_visible(False)
+
+    ax1.set_xlabel("date", fontweight='bold')
+    ax1.set_title(
+        f"Event {event_label} | MA = {ma_window} days | Best lag = {best_lag} days",
+        fontweight='bold'
+    )
+
+    for ax in [ax1, ax2]:
+        for tick in ax.get_xticklabels() + ax.get_yticklabels():
+            tick.set_fontweight('bold')
+
+    lines = [p_line, q_line]
+    labels = [l.get_label() for l in lines]
+
+    legend = fig.legend(
+        lines, labels,
+        loc='lower center',
+        ncol=2,
+        frameon=False
+    )
+
+    for txt in legend.get_texts():
+        txt.set_fontweight('bold')
+
+    plt.subplots_adjust(bottom=0.22)
+
+    ts_name = f"{event_label}_MA{ma_window}_bestlag{best_lag}_timeseries.jpg"
+    plt.savefig(
+        os.path.join(out_dir, ts_name),
+        dpi=300,
+        bbox_inches="tight"
+    )
+    plt.close()
+
+    plt.figure(figsize=(7, 4))
+    plt.plot(range(max_lag + 1), correlations, marker='o', color='black')
+    plt.axvline(best_lag, color='red', linestyle='--',
+                label=f'Best lag = {best_lag}')
+    plt.xlabel("Lag (days)", fontweight='bold')
+    plt.ylabel("Correlation", fontweight='bold')
+    plt.title(f"Lagged Correlation | MA = {ma_window} days", fontweight='bold')
+    plt.grid(True, linestyle='--', alpha=0.4)
+
+    legend = plt.legend(frameon=False)
+    for txt in legend.get_texts():
+        txt.set_fontweight('bold')
+
+    for tick in plt.gca().get_xticklabels() + plt.gca().get_yticklabels():
+        tick.set_fontweight('bold')
+
+    plt.tight_layout()
+    corr_name = f"{event_label}_MA{ma_window}_correlation_vs_lag.jpg"
+    plt.savefig(os.path.join(out_dir, corr_name), dpi=300)
+    plt.close()
+
+    print(f"Best lag = {best_lag} days | r = {best_corr:.4f}")
+
+print("All MA window iterations completed successfully.")
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
+
+input_file = r"E:\camels_de\13837553\camels_de\germany_timeseries\CAMELS_DE_hydromet_timeseries_DE110290.csv"
+output_folder = r"E:\phd_results\objective_1\germany\plots\time_series_plot_events\DE110290"
+os.makedirs(output_folder, exist_ok=True)
+
+df = pd.read_csv(input_file)
+df.columns = df.columns.str.strip()
+df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
+
+start_date = pd.to_datetime('1986-01-01')
+end_date   = pd.to_datetime('1990-01-01')
+
+df_date_range = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
+
+if df_date_range.empty:
+    print(f"No data available between {start_date.date()} and {end_date.date()}")
+
+else:
+
+    fig, axs = plt.subplots(2, 1, figsize=(14, 7), sharex=True)
+
+    axs[0].plot(df_date_range['date'], df_date_range['precipitation_mm'],
+                color='red', label='Precipitation (mm)', lw=1)
+
+    axs[0].set_ylabel('Precipitation')
+    axs[0].set_title(
+        f'Daily Hydro-Meteorological Variables\n{start_date.date()} to {end_date.date()}'
+    )
+    axs[0].grid(True, linestyle='--', alpha=0.4)
+    axs[0].spines[['top', 'right']].set_visible(False)
+    axs[0].legend(frameon=False)
+
+    axs[1].plot(df_date_range['date'], df_date_range['discharge_mm'],
+                color='blue', label='Streamflow (mm)', lw=1)
+
+    axs[1].set_ylabel('Streamflow (mm)')
+    axs[1].set_xlabel('Date')
+    axs[1].grid(True, linestyle='--', alpha=0.4)
+    axs[1].spines[['top', 'right']].set_visible(False)
+    axs[1].legend(frameon=False)
+
+    plt.subplots_adjust(hspace=0.15)
+
+    output_path = os.path.join(
+        output_folder,
+        f"daily_precip_qobs_{start_date.date()}_to_{end_date.date()}.jpg"
+    )
+
+    plt.savefig(output_path, dpi=600, bbox_inches='tight')
+    plt.close()
+
+    print(f"Plot saved successfully:\n{output_path}")
+
+
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+
+csv_file = r"E:\phd_results\objective_1\germany\plots_for_attributes_rmi_AE.csv"
+
+output_dir = r"E:\phd_results\objective_1\germany\plots\rmi"
+
+os.makedirs(output_dir, exist_ok=True)
+
+df = pd.read_csv(csv_file)
+
+rmi_cols = ["RMI1", "RMI2", "RMI3", "RMI4", "RMI5"]
+
+for _, row in df.iterrows():
+    gauge_id = str(row["Catchment"])
+    rmi_values = row[rmi_cols].values
+
+    plt.figure(figsize=(6, 4))
+    plt.plot(rmi_cols, rmi_values, marker='o', linestyle='-')
+
+    plt.xlabel("RMI")
+    plt.ylabel("Ratio")
+    plt.title("RMI")
+
+    plt.grid(True)
+
+    output_path = os.path.join(output_dir, f"{gauge_id}.jpg")
+    plt.savefig(output_path, dpi=600, bbox_inches="tight")
+    plt.close()
+
+print("All catchment plots have been saved successfully.")
 
