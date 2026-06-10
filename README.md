@@ -1,11 +1,11 @@
-# Germany Catchment Variability and Dynamic Signature Analysis
+# Catchment Variability and Dynamic Signature Analysis
 
 ## Overview
 
 This repository contains the code used to generate:
 
 * Dynamic signatures using Wavelet Transform Coherence (WTC) analysis in MATLAB.
-* Variability signatures using Python-based hydrological analysis.
+* Variability signatures using Python-based analysis.
 
 The workflow reproduces the analyses performed in the study and can be adapted for datasets from other countries with minor modifications.
 
@@ -73,7 +73,7 @@ Run the MATLAB script:
 Germany_WTC_Main_code.m
 ```
 
-This script performs Wavelet Transform Coherence (WTC) analysis and extracts dynamic signatures.
+This script performs Wavelet Transform Coherence (WTC) analysis and extracts dynamic signatures for countinuous scales.
 
 The following temporal scale ranges are analyzed:
 
@@ -83,9 +83,9 @@ The following temporal scale ranges are analyzed:
 * 30-183 days
 * 183-365 days
 
-For each scale range, the script calculates:
+For each scale range, the lag and RMI need to be calculated using equations provided in paper:
 
-* Coherence ratio
+* RMI ratio
 * Lag ratio
 
 These metrics constitute the dynamic signatures used in the analysis.
