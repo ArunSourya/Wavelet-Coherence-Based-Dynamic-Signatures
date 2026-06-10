@@ -59,7 +59,7 @@ Add the toolbox directory to your MATLAB path before running the MATLAB scripts.
 
 ## Step 2: Prepare the Dataset
 
-Download the provided dataset and extract the contents of `data.zip` into your working directory.
+Download the provided dataset "https://doi.org/10.5281/zenodo.20630407" and extract the contents of `data.zip` into your working directory.
 
 Ensure that all input files are available before executing the workflow.
 
