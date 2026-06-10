@@ -83,7 +83,7 @@ The following temporal scale ranges are analyzed:
 * 30-183 days
 * 183-365 days
 
-For each scale range, the lag and RMI need to be calculated using equations provided in paper:
+For each scale range, the lag and RMI signatures were calculated:
 
 * RMI ratio
 * Lag ratio

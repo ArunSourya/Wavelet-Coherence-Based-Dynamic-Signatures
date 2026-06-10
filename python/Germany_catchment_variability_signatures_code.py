@@ -311,6 +311,121 @@ print("Mean absolute AE difference saved successfully.")
 
 # In[ ]:
 
+# to extract the lag signatures
 
+import os
+import pandas as pd
+import numpy as np
+input_folder = r"E:\phd_results\objective_1\germany\lag_filtered_coh_gt_0p8"
+output_csv = r"E:\phd_results\objective_1\germany\mean_lag_overscales1.csv"
+
+rows = []
+
+for filename in os.listdir(input_folder):
+    if not filename.endswith("_lag_deg_coh_gt_0p8.csv"):
+        continue
+
+    catchment = filename.replace("_lag_deg_coh_gt_0p8.csv", "")
+    file_path = os.path.join(input_folder, filename)
+
+    df = pd.read_csv(file_path)
+
+    df_abs = df.abs()
+
+    col_means = df_abs.mean(skipna=True)
+    row = col_means.to_dict()
+    row["catchment_name"] = catchment
+
+    rows.append(row)
+mean_df = pd.DataFrame(rows)
+cols = ["catchment_name"] + [c for c in mean_df.columns if c != "catchment_name"]
+mean_df = mean_df[cols]
+mean_df.to_csv(output_csv, index=False)
+
+print(f"Mean ABSOLUTE lag values saved to:\n{output_csv}")
+
+# this is to extract lag value for each scale
+import pandas as pd
+
+input_file = r"E:\phd_results\objective_1\germany\mean_lag_overscales1.csv"
+output_file = r"E:\phd_results\objective_1\germany\max_lag_overscales1.csv"
+
+df = pd.read_csv(input_file)
+
+df.rename(columns={df.columns[0]: 'catchment'}, inplace=True)
+
+scale_cols = df.columns[1:]
+
+scale_map = {}
+for col in scale_cols:
+    try:
+        scale_map[col] = float(col)
+    except:
+        continue
+
+lag1_cols = [col for col, val in scale_map.items() if 2.066087295 <= val <= 6.949461602]
+lag2_cols = [col for col, val in scale_map.items() if 7.362698093 <= val <= 13.8989232]
+lag3_cols = [col for col, val in scale_map.items() if 14.72539619 <= val <= 29.45079237]
+lag4_cols = [col for col, val in scale_map.items() if 31.20202762 <= val <= 176.5053225]
+lag5_cols = [col for col, val in scale_map.items() if 187.0008752 <= val <= 353.010645]
+
+result = pd.DataFrame()
+result['catchment'] = df['catchment']
+
+result['lag1'] = df[lag1_cols].max(axis=1)
+result['lag2'] = df[lag2_cols].max(axis=1)
+result['lag3'] = df[lag3_cols].max(axis=1)
+result['lag4'] = df[lag4_cols].max(axis=1)
+result['lag5'] = df[lag5_cols].max(axis=1)
+
+result.to_csv(output_file, index=False)
+
+print("Max lag values saved successfully.")
+
+
+# RMI signature for the scale range 
+
+import pandas as pd
+import re
+
+input_file = r"E:\phd_results\objective_1\germany\mean_coherence_values.csv"
+output_file = r"E:\phd_results\objective_1\germany\mean_coherence_values_rmi.csv"
+
+df = pd.read_csv(input_file)
+
+catchment = df["Catchment"]
+data = df.drop(columns=["Catchment"])
+
+periods = data.columns.str.extract(r"P_(\d+\.?\d*)")[0].astype(float)
+
+group1_cols = data.columns[(periods >= 2.07) & (periods <= 6.95)]
+group2_cols = data.columns[(periods >= 7.36) & (periods <= 14.73)]
+group3_cols = data.columns[(periods >= 15.60) & (periods <= 58.90)]
+group4_cols = data.columns[(periods >= 62.40) & (periods <= 176.51)]
+group5_cols = data.columns[(periods >= 187.00) & (periods <= 353.01)]
+
+g1 = data[group1_cols].mean(axis=1)
+g2 = data[group2_cols].mean(axis=1)
+g3 = data[group3_cols].mean(axis=1)
+g4 = data[group4_cols].mean(axis=1)
+g5 = data[group5_cols].mean(axis=1)
+g6 = g1+g2+g3+g4+g5
+result = pd.DataFrame({
+    "Catchment": catchment,
+    "Mean_P_2.07_to_6.95": g1,
+    "Mean_P_7.36_to_14.73": g2,
+    "Mean_P_15.60_to_58.90": g3,
+    "Mean_P_62.40_to_176.51": g4,
+    "Mean_P_187.00_to_353.01": g5,
+    "G1_by_G6": g1 / g6,
+    "G2_by_G6": g2 / g6,
+    "G3_by_G6": g3 / g6,
+    "G4_by_G6": g4 / g6,
+    "G5_by_G6": g5 / g6
+})
+
+result.to_csv(output_file, index=False)
+
+print("Correct RMI file saved to:", output_file)
 
 
