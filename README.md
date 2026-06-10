@@ -15,7 +15,6 @@ The workflow reproduces the analyses performed in the study and can be adapted f
 
 ```text
 .
-├── data.zip
 ├── Germany_WTC_Main_code.m
 ├── Germany_catchment_variability_signatures_code.py
 └── README.md
@@ -78,11 +77,11 @@ This script performs Wavelet Transform Coherence (WTC) analysis and extracts dyn
 
 The following temporal scale ranges are analyzed:
 
-* 2–7 days
-* 7–14 days
-* 14–30 days
-* 30–183 days
-* 183–365 days
+* 2-7 days
+* 7-14 days
+* 14-30 days
+* 30-183 days
+* 183-365 days
 
 For each scale range, the script calculates:
 
